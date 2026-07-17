@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: school-study-portal
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
