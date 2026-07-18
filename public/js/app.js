@@ -7,6 +7,9 @@ const toastEl = document.getElementById('toast');
 
 const previewableExts = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'htm'];
 
+let panelContext = { classKey: null, streamKey: null, subjectKey: null, chapter: null, isSubjectBook: false, chapters: [] };
+let panelFile = null;
+
 function init() {
   showLoading();
   fetch('/api/curriculum')
@@ -15,6 +18,7 @@ function init() {
       Object.assign(curriculum, data);
       showClasses();
     });
+  setupUploadPanel();
 }
 
 function showLoading() {
@@ -44,7 +48,7 @@ function buildBreadcrumb() {
     if (i > 0) {
       const span = document.createElement('span');
       span.className = 'separator';
-      span.textContent = '›';
+      span.textContent = '\u203A';
       breadcrumbEl.appendChild(span);
     }
     if (i === parts.length - 1) {
@@ -84,7 +88,7 @@ function showClasses() {
 function showStreams(classObj) {
   const cls = curriculum[classObj.key];
   contentEl.innerHTML = `
-    <h2 class="page-title">${cls.label} — Select Stream</h2>
+    <h2 class="page-title">${cls.label} \u2014 Select Stream</h2>
     <div class="card-grid">
       ${Object.entries(cls.streams).map(([key, stream]) => `
         <div class="card stream-card" onclick="navigateTo([
@@ -105,7 +109,7 @@ function showSubjects(classObj, streamObj) {
   const cls = curriculum[classObj.key];
   const stream = cls.streams[streamObj.key];
   contentEl.innerHTML = `
-    <h2 class="page-title">${stream.label} — Subjects</h2>
+    <h2 class="page-title">${stream.label} \u2014 Subjects</h2>
     <div class="card-grid">
       ${Object.entries(stream.subjects).map(([key, subj]) => `
         <div class="card subject-card" onclick="navigateTo([
@@ -129,31 +133,13 @@ function showChapters(classObj, streamObj, subjectObj) {
   const subject = stream.subjects[subjectObj.key];
   const chapters = subject.chapters;
 
+  panelContext = {
+    classKey: classObj.key, streamKey: streamObj.key, subjectKey: subjectObj.key,
+    chapter: null, isSubjectBook: false, chapters: chapters
+  };
+
   contentEl.innerHTML = `
-    <h2 class="page-title">${subject.label} — Chapters</h2>
-    <div class="upload-form">
-      <h3>Upload Study Material</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Category</label>
-          <select id="uploadCategory">
-            <option value="notes">Notes</option>
-            <option value="pdfs">PDFs</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Chapter</label>
-          <select id="uploadChapter">
-            ${chapters.map(ch => `<option value="${ch}">${ch}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>File</label>
-          <input type="file" id="uploadFileInput">
-        </div>
-      </div>
-      <button class="btn btn-success" onclick="uploadFile('${classObj.key}','${streamObj.key}','${subjectObj.key}')">Upload</button>
-    </div>
+    <h2 class="page-title">${subject.label} \u2014 Chapters</h2>
     <div id="ncertSection"></div>
     <div id="booksSection"></div>
     <div class="card-grid">
@@ -164,7 +150,7 @@ function showChapters(classObj, streamObj, subjectObj) {
           {key:'${subjectObj.key}', label:'${subject.label}'},
           {key:'${ch}', label:'${ch}'}
         ])" data-tilt>
-          <div class="icon">📖</div>
+          <div class="icon">\uD83D\uDCD6</div>
           <h3>${ch}</h3>
           <p>View files</p>
         </div>
@@ -186,15 +172,15 @@ function loadNcertBooks(cls, stream, subject) {
       section.innerHTML = `
         <div class="category-section" style="margin-bottom:2rem">
           <div class="category-header">
-            <span style="font-size:1.2rem">📕</span>
+            <span style="font-size:1.2rem">\uD83D\uDCD5</span>
             <h4>NCERT Textbook PDFs (${files.length})</h4>
           </div>
           <div class="card-grid">
             ${files.map(f => `
               <div class="card file-card">
-                <div class="file-icon">📕</div>
+                <div class="file-icon">\uD83D\uDCD5</div>
                 <div class="file-name">${f.name}</div>
-                <div class="file-meta">PDF &bull; ${(f.size/1024).toFixed(0)} KB</div>
+                <div class="file-meta">PDF \u2022 ${(f.size/1024).toFixed(0)} KB</div>
                 <div class="file-actions">
                   ${isPreviewable(f.name) ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
                   <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
@@ -216,19 +202,8 @@ function loadSubjectBooks(cls, stream, subject) {
   section.innerHTML = `
     <div class="category-section" style="margin-bottom:2rem">
       <div class="category-header">
-        <span style="font-size:1.2rem">📚</span>
+        <span style="font-size:1.2rem">\uD83D\uDCDA</span>
         <h4>Books</h4>
-      </div>
-      <div class="upload-form" style="margin-bottom:1rem">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Upload a Book</label>
-            <input type="file" id="bookFileInput">
-          </div>
-          <div class="form-group" style="display:flex;align-items:flex-end">
-            <button class="btn btn-success" onclick="uploadSubjectBook('${cls}','${stream}','${subject}')">Upload Book</button>
-          </div>
-        </div>
       </div>
       <div id="booksList" class="card-grid"></div>
     </div>
@@ -240,14 +215,14 @@ function loadSubjectBooks(cls, stream, subject) {
       const list = document.getElementById('booksList');
       if (!list) return;
       if (!files.length) {
-        list.innerHTML = `<div class="empty-state" style="padding:1rem"><p style="font-size:0.85rem">No books uploaded yet</p></div>`;
+        list.innerHTML = `<div class="empty-state" style="padding:1rem"><p style="font-size:0.85rem">No books uploaded yet. Use the upload button to add books.</p></div>`;
         return;
       }
       list.innerHTML = files.map(f => `
         <div class="card file-card">
-          <div class="file-icon">📚</div>
+          <div class="file-icon">\uD83D\uDCDA</div>
           <div class="file-name">${f.name}</div>
-          <div class="file-meta">PDF &bull; ${(f.size/1024).toFixed(0)} KB</div>
+          <div class="file-meta">PDF \u2022 ${(f.size/1024).toFixed(0)} KB</div>
           <div class="file-actions">
             ${isPreviewable(f.name) ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
             <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
@@ -259,35 +234,16 @@ function loadSubjectBooks(cls, stream, subject) {
     .catch(() => {});
 }
 
-function uploadSubjectBook(cls, stream, subject) {
-  const fileInput = document.getElementById('bookFileInput');
-  const file = fileInput.files[0];
-  if (!file) { toast('Please select a file'); return; }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('class', cls);
-  formData.append('stream', stream);
-  formData.append('subject', subject);
-
-  const btn = document.querySelector('#booksSection .btn-success');
-  if (btn) { btn.textContent = 'Uploading...'; btn.disabled = true; }
-
-  fetch('/api/subject-books/upload', { method: 'POST', body: formData })
-    .then(r => r.json())
-    .then(data => {
-      toast('Book uploaded successfully!');
-      setTimeout(() => loadSubjectBooks(cls, stream, subject), 500);
-    })
-    .catch(err => {
-      toast('Upload failed');
-      if (btn) { btn.textContent = 'Upload Book'; btn.disabled = false; }
-    });
-}
-
 function showFiles(classObj, streamObj, subjectObj, chapterObj) {
   const chapterName = chapterObj.key;
-  contentEl.innerHTML = `<h2 class="page-title">${chapterName}</h2><div id="filesContent"><div class="empty-state"><div class="icon">⏳</div><p>Loading files...</p></div></div>`;
+  const subject = curriculum[classObj.key].streams[streamObj.key].subjects[subjectObj.key];
+
+  panelContext = {
+    classKey: classObj.key, streamKey: streamObj.key, subjectKey: subjectObj.key,
+    chapter: chapterName, isSubjectBook: false, chapters: subject.chapters
+  };
+
+  contentEl.innerHTML = `<h2 class="page-title">${chapterName}</h2><div id="filesContent"><div class="empty-state"><div class="icon">\u23F3</div><p>Loading files...</p></div></div>`;
 
   fetch(`/api/files/${classObj.key}/${streamObj.key}/${subjectObj.key}/${encodeURIComponent(chapterName)}`)
     .then(r => r.json())
@@ -299,38 +255,17 @@ function showFiles(classObj, streamObj, subjectObj, chapterObj) {
 function renderFiles(classObj, streamObj, subjectObj, chapterName, data) {
   const hasAny = Object.values(data).some(arr => arr.length > 0);
 
-  let html = `
-    <div class="upload-form">
-      <h3>Upload to ${chapterName}</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Category</label>
-          <select id="uploadCategory">
-            <option value="notes">Notes</option>
-            <option value="pdfs">PDFs</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>File</label>
-          <input type="file" id="uploadFileInput">
-        </div>
-      </div>
-      <button class="btn btn-success" onclick="uploadFile('${classObj.key}','${streamObj.key}','${subjectObj.key}','${chapterName}')">Upload</button>
-    </div>
-  `;
-
   if (!hasAny) {
-    html += `<div class="empty-state"><div class="icon">📂</div><p>No files uploaded yet for this chapter.</p></div>`;
-    contentEl.innerHTML = html;
+    contentEl.innerHTML = `<h2 class="page-title">${chapterName}</h2><div class="empty-state"><div class="icon">\uD83D\uDCC1</div><p>No files uploaded yet for this chapter.</p><p style="font-size:0.85rem;margin-top:0.5rem;color:rgba(255,255,255,0.3)">Use the upload button to add files.</p></div>`;
     return;
   }
 
   const categories = [
-    { key: 'notes', label: 'Notes', icon: '📝' },
-    { key: 'pdfs', label: 'PDFs', icon: '📄' },
+    { key: 'notes', label: 'Notes', icon: '\uD83D\uDCDD' },
+    { key: 'pdfs', label: 'PDFs', icon: '\uD83D\uDCC4' },
   ];
 
-  html += `<div class="files-section">`;
+  let html = `<h2 class="page-title">${chapterName}</h2><div class="files-section">`;
 
   for (const cat of categories) {
     const files = data[cat.key] || [];
@@ -354,7 +289,7 @@ function renderFiles(classObj, streamObj, subjectObj, chapterName, data) {
           <div class="card file-card">
             <div class="file-icon">${icon}</div>
             <div class="file-name">${f.name}</div>
-            <div class="file-meta">${ext} &bull; ${sizeKB} KB</div>
+            <div class="file-meta">${ext} \u2022 ${sizeKB} KB</div>
             <div class="file-actions">
               ${canPreview ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
               <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
@@ -378,13 +313,13 @@ function isPreviewable(filename) {
 
 function getFileIcon(ext) {
   const icons = {
-    PDF: '📕', DOC: '📘', DOCX: '📘', XLS: '📗', XLSX: '📗',
-    PPT: '📙', PPTX: '📙', TXT: '📃', MD: '📝',
-    ZIP: '🗜️', RAR: '🗜️', IMAGE: '🖼️',
-    JPG: '🖼️', JPEG: '🖼️', PNG: '🖼️', GIF: '🖼️', SVG: '🖼️', WEBP: '🖼️',
-    MP4: '🎬', MP3: '🎵',
+    PDF: '\uD83D\uDCD5', DOC: '\uD83D\uDCD8', DOCX: '\uD83D\uDCD8', XLS: '\uD83D\uDCD7', XLSX: '\uD83D\uDCD7',
+    PPT: '\uD83D\uDCD9', PPTX: '\uD83D\uDCD9', TXT: '\uD83D\uDCC3', MD: '\uD83D\uDCDD',
+    ZIP: '\uD83D\uDDC4\uFE0F', RAR: '\uD83D\uDDC4\uFE0F', IMAGE: '\uD83D\uDDBC\uFE0F',
+    JPG: '\uD83D\uDDBC\uFE0F', JPEG: '\uD83D\uDDBC\uFE0F', PNG: '\uD83D\uDDBC\uFE0F', GIF: '\uD83D\uDDBC\uFE0F', SVG: '\uD83D\uDDBC\uFE0F', WEBP: '\uD83D\uDDBC\uFE0F',
+    MP4: '\uD83C\uDFAC', MP3: '\uD83C\uDFB5',
   };
-  return icons[ext] || '📄';
+  return icons[ext] || '\uD83D\uDCC4';
 }
 
 function viewFile(url, filename) {
@@ -442,52 +377,6 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function uploadFile(classKey, streamKey, subjectKey, chapterName) {
-  const category = document.getElementById('uploadCategory').value;
-  const fileInput = document.getElementById('uploadFileInput');
-  const file = fileInput.files[0];
-  if (!file) { toast('Please select a file'); return; }
-
-  let selectedChapter = chapterName;
-  if (!selectedChapter) {
-    selectedChapter = document.getElementById('uploadChapter').value;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('class', classKey);
-  formData.append('stream', streamKey);
-  formData.append('subject', subjectKey);
-  formData.append('chapter', selectedChapter);
-  formData.append('category', category);
-
-  const btn = document.querySelector('.upload-form .btn-success');
-  if (btn) { btn.textContent = 'Uploading...'; btn.disabled = true; }
-
-  fetch('/api/upload', { method: 'POST', body: formData })
-    .then(r => r.json())
-    .then(data => {
-      toast('File uploaded successfully!');
-      setTimeout(() => location.reload(), 500);
-    })
-    .catch(err => {
-      toast('Upload failed');
-      if (btn) { btn.textContent = 'Upload'; btn.disabled = false; }
-    });
-}
-
-function deleteFile(classKey, streamKey, subjectKey, chapter, category, filename) {
-  if (!confirm('Delete this file?')) return;
-  fetch(`/api/files/${classKey}/${streamKey}/${subjectKey}/${encodeURIComponent(chapter)}/${category}/${encodeURIComponent(filename)}`, {
-    method: 'DELETE'
-  })
-  .then(r => r.json())
-  .then(() => {
-    toast('File deleted');
-    setTimeout(() => location.reload(), 400);
-  });
-}
-
 function initTilt() {
   document.querySelectorAll('[data-tilt]').forEach(card => {
     card.addEventListener('mousemove', (e) => {
@@ -506,12 +395,165 @@ function initTilt() {
   });
 }
 
+/* ---- Upload Panel ---- */
+function setupUploadPanel() {
+  const dropzone = document.getElementById('uploadDropzone');
+  const fileInput = document.getElementById('panelFileInput');
+
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('dragover'); });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) setPanelFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) setPanelFile(fileInput.files[0]);
+  });
+}
+
+function toggleUpload() {
+  const panel = document.getElementById('uploadPanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    let overlay = document.querySelector('.upload-overlay');
+    if (overlay) overlay.classList.remove('active');
+  } else {
+    updatePanelUI();
+    panel.classList.add('open');
+    let overlay = document.querySelector('.upload-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'upload-overlay';
+      overlay.onclick = () => toggleUpload();
+      document.body.appendChild(overlay);
+    }
+    overlay.classList.add('active');
+  }
+}
+
+function updatePanelUI() {
+  const catSelect = document.getElementById('panelCategory');
+  const chapterField = document.getElementById('panelChapterField');
+  const chapterSelect = document.getElementById('panelChapter');
+
+  if (panelContext.chapter) {
+    catSelect.innerHTML = `<option value="notes">📝 Notes</option><option value="pdfs">📄 PDFs</option>`;
+    chapterField.style.display = 'none';
+  } else if (panelContext.classKey && panelContext.streamKey && panelContext.subjectKey) {
+    catSelect.innerHTML = `<option value="notes">📝 Notes</option><option value="pdfs">📄 PDFs</option><option value="books">📚 Books</option>`;
+    if (panelContext.chapters && panelContext.chapters.length) {
+      chapterField.style.display = '';
+      chapterSelect.innerHTML = panelContext.chapters.map(ch => `<option value="${ch}">${ch}</option>`).join('');
+    } else {
+      chapterField.style.display = 'none';
+    }
+  } else {
+    chapterField.style.display = 'none';
+    catSelect.innerHTML = `<option value="notes">📝 Notes</option><option value="pdfs">📄 PDFs</option>`;
+  }
+}
+
+function setPanelFile(file) {
+  panelFile = file;
+  const preview = document.getElementById('uploadFilePreview');
+  const dropzone = document.getElementById('uploadDropzone');
+  const icon = getFileIcon(file.name.split('.').pop().toUpperCase());
+  document.getElementById('previewFileIcon').textContent = icon;
+  document.getElementById('previewFileName').textContent = file.name;
+  document.getElementById('previewFileSize').textContent = formatSize(file.size);
+  dropzone.style.display = 'none';
+  preview.style.display = '';
+  document.getElementById('panelUploadBtn').disabled = false;
+}
+
+function clearUploadFile() {
+  panelFile = null;
+  document.getElementById('uploadFilePreview').style.display = 'none';
+  document.getElementById('uploadDropzone').style.display = '';
+  document.getElementById('panelFileInput').value = '';
+  document.getElementById('panelUploadBtn').disabled = true;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function submitPanelUpload() {
+  if (!panelFile || !panelContext.classKey) return;
+
+  const category = document.getElementById('panelCategory').value;
+  const isBooks = category === 'books';
+  const chapterSelect = document.getElementById('panelChapter');
+  const chapter = panelContext.chapter || (chapterSelect.value || '');
+
+  if (!isBooks && !chapter) { toast('Select a chapter'); return; }
+
+  const formData = new FormData();
+  formData.append('file', panelFile);
+  formData.append('class', panelContext.classKey);
+  formData.append('stream', panelContext.streamKey);
+  formData.append('subject', panelContext.subjectKey);
+
+  const progress = document.getElementById('uploadProgress');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const btn = document.getElementById('panelUploadBtn');
+  const url = isBooks ? '/api/subject-books/upload' : '/api/upload';
+
+  if (!isBooks) formData.append('chapter', chapter);
+  formData.append('category', category);
+
+  progress.style.display = '';
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+  fill.style.width = '30%';
+  text.textContent = 'Uploading...';
+
+  fetch(url, { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      fill.style.width = '100%';
+      text.textContent = 'Upload complete!';
+      addRecentUpload(panelFile.name);
+      toast('File uploaded!');
+      setTimeout(() => {
+        clearUploadFile();
+        progress.style.display = 'none';
+        fill.style.width = '0%';
+        btn.textContent = 'Upload File';
+        btn.disabled = true;
+        toggleUpload();
+        location.reload();
+      }, 800);
+    })
+    .catch(err => {
+      toast('Upload failed');
+      progress.style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = 'Upload File';
+    });
+}
+
+function addRecentUpload(name) {
+  const recent = document.getElementById('uploadRecent');
+  if (!recent) return;
+  if (!recent.querySelector('h5')) recent.innerHTML = `<h5>Recent Uploads</h5>`;
+  const div = document.createElement('div');
+  div.className = 'recent-item';
+  div.innerHTML = `<span class="recent-icon">✅</span><span class="recent-name">${name}</span><span class="recent-status done">Done</span>`;
+  recent.prepend(div);
+}
+
 /* ---- Chat ---- */
 let chatHistory = [];
 
 function toggleChat() {
   const w = document.getElementById('chatWidget');
-  const t = document.getElementById('chatToggle');
   w.classList.toggle('open');
   if (w.classList.contains('open')) {
     document.getElementById('chatInput').focus();
@@ -589,17 +631,17 @@ async function sendMessage() {
 }
 
 function getStreamIcon(key) {
-  const icons = { medical: '🩺', non_medical: '🔬', commerce: '💰', arts: '🎨' };
-  return icons[key] || '📘';
+  const icons = { medical: '\uD83E\uDE7A', non_medical: '\uD83D\uDD2C', commerce: '\uD83D\uDCB0', arts: '\uD83C\uDFA8' };
+  return icons[key] || '\uD83D\uDCD8';
 }
 
 function getSubjectIcon(key) {
   const icons = {
-    physics: '⚡', chemistry: '🧪', biology: '🧬', mathematics: '📐',
-    english: '📖', accountancy: '📊', business_studies: '🏢', economics: '📈',
-    history: '🏛️', political_science: '🗳️', geography: '🌍', psychology: '🧠', sociology: '👥'
+    physics: '\u26A1', chemistry: '\uD83E\uDDEA', biology: '\uD83E\uDDEC', mathematics: '\uD83D\uDCD0',
+    english: '\uD83D\uDCD6', accountancy: '\uD83D\uDCCA', business_studies: '\uD83C\uDFE2', economics: '\uD83D\uDCC8',
+    history: '\uD83C\uDFDB\uFE0F', political_science: '\uD83D\uDDF2\uFE0F', geography: '\uD83C\uDF0D', psychology: '\uD83E\uDDE0', sociology: '\uD83D\uDC65'
   };
-  return icons[key] || '📓';
+  return icons[key] || '\uD83D\uDCD3';
 }
 
 init();

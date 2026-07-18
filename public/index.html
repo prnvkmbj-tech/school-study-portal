@@ -20,6 +20,60 @@
 
   <div class="toast" id="toast"></div>
 
+  <!-- Upload Side Panel -->
+  <button class="upload-toggle" id="uploadToggle" onclick="toggleUpload()" title="Upload Material">
+    <span>⬆</span>
+  </button>
+
+  <div class="upload-panel" id="uploadPanel">
+    <div class="upload-panel-header">
+      <div class="upload-panel-title">
+        <span class="upload-panel-icon">📤</span>
+        <h4>Upload Material</h4>
+      </div>
+      <button class="upload-panel-close" onclick="toggleUpload()">&times;</button>
+    </div>
+    <div class="upload-panel-body" id="uploadPanelBody">
+      <div class="upload-dropzone" id="uploadDropzone">
+        <div class="dropzone-icon">📁</div>
+        <p class="dropzone-text">Drag & drop a file here</p>
+        <p class="dropzone-sub">or click to browse</p>
+        <input type="file" id="panelFileInput" class="dropzone-input">
+      </div>
+      <div class="upload-file-preview" id="uploadFilePreview" style="display:none">
+        <div class="file-preview-card">
+          <span class="file-preview-icon" id="previewFileIcon">📄</span>
+          <div class="file-preview-info">
+            <span class="file-preview-name" id="previewFileName"></span>
+            <span class="file-preview-size" id="previewFileSize"></span>
+          </div>
+          <button class="file-preview-remove" onclick="clearUploadFile()">&times;</button>
+        </div>
+      </div>
+      <div class="upload-panel-fields">
+        <div class="upload-field">
+          <label>Category</label>
+          <select id="panelCategory">
+            <option value="notes">📝 Notes</option>
+            <option value="pdfs">📄 PDFs</option>
+            <option value="books">📚 Books</option>
+          </select>
+        </div>
+        <div class="upload-field" id="panelChapterField" style="display:none">
+          <label>Chapter</label>
+          <select id="panelChapter"></select>
+        </div>
+      </div>
+      <div class="upload-progress" id="uploadProgress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <span class="progress-text" id="progressText">Uploading...</span>
+      </div>
+      <button class="btn btn-success upload-submit-btn" id="panelUploadBtn" onclick="submitPanelUpload()" disabled>Upload File</button>
+      <div class="upload-panel-recent" id="uploadRecent"></div>
+    </div>
+  </div>
+
+  <!-- AI Tutor -->
   <button class="chat-toggle" id="chatToggle" onclick="toggleChat()" title="AI Tutor">
     <span>🤖</span>
   </button>
