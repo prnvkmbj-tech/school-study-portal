@@ -40,6 +40,25 @@ app.get('/api/curriculum', (req, res) => {
   res.json(curriculum);
 });
 
+app.get('/api/ncert/:class/:stream/:subject', async (req, res) => {
+  try {
+    const { class: cls, stream, subject } = req.params;
+    const ncertDir = path.join(UPLOADS_DIR, cls, stream, subject, 'ncert-textbook');
+    if (await fs.pathExists(ncertDir)) {
+      const files = (await fs.readdir(ncertDir)).filter(f => f.endsWith('.pdf'));
+      res.json(files.map(f => ({
+        name: f,
+        size: fs.statSync(path.join(ncertDir, f)).size,
+        url: `/uploads/${cls}/${stream}/${subject}/ncert-textbook/${encodeURIComponent(f)}`
+      })));
+    } else {
+      res.json([]);
+    }
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 app.get('/api/files/:class/:stream/:subject/:chapter', async (req, res) => {
   try {
     const { class: cls, stream, subject, chapter } = req.params;
@@ -146,7 +165,9 @@ app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const { ensureNcertPdfs } = require('./ncert-loader');
+
+app.listen(PORT, '0.0.0.0', async () => {
   if (!IS_PRODUCTION) {
     const os = require('os');
     const nets = os.networkInterfaces();
@@ -159,4 +180,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  Local:   http://localhost:${PORT}`);
     console.log(`  Network: http://${ip}:${PORT}\n`);
   }
+  await ensureNcertPdfs();
 });

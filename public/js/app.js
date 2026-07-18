@@ -128,7 +128,6 @@ function showChapters(classObj, streamObj, subjectObj) {
   const stream = cls.streams[streamObj.key];
   const subject = stream.subjects[subjectObj.key];
   const chapters = subject.chapters;
-  const half = Math.ceil(chapters.length / 2);
 
   contentEl.innerHTML = `
     <h2 class="page-title">${subject.label} — Chapters</h2>
@@ -156,6 +155,7 @@ function showChapters(classObj, streamObj, subjectObj) {
       </div>
       <button class="btn btn-success" onclick="uploadFile('${classObj.key}','${streamObj.key}','${subjectObj.key}')">Upload</button>
     </div>
+    <div id="ncertSection"></div>
     <div class="card-grid">
       ${chapters.map(ch => `
         <div class="card chapter-card" onclick="navigateTo([
@@ -172,6 +172,40 @@ function showChapters(classObj, streamObj, subjectObj) {
     </div>
   `;
   initTilt();
+  loadNcertBooks(classObj.key, streamObj.key, subjectObj.key);
+}
+
+function loadNcertBooks(cls, stream, subject) {
+  const section = document.getElementById('ncertSection');
+  if (!section) return;
+  fetch(`/api/ncert/${cls}/${stream}/${subject}`)
+    .then(r => r.json())
+    .then(files => {
+      if (!files.length) return;
+      section.innerHTML = `
+        <div class="category-section" style="margin-bottom:2rem">
+          <div class="category-header">
+            <span style="font-size:1.2rem">📕</span>
+            <h4>NCERT Textbook PDFs (${files.length})</h4>
+          </div>
+          <div class="card-grid">
+            ${files.map(f => `
+              <div class="card file-card">
+                <div class="file-icon">📕</div>
+                <div class="file-name">${f.name}</div>
+                <div class="file-meta">PDF &bull; ${(f.size/1024).toFixed(0)} KB</div>
+                <div class="file-actions">
+                  ${isPreviewable(f.name) ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
+                  <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
+                  <a href="${f.url}" class="btn btn-outline" download>Download</a>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    })
+    .catch(() => {});
 }
 
 function showFiles(classObj, streamObj, subjectObj, chapterObj) {
@@ -250,7 +284,6 @@ function renderFiles(classObj, streamObj, subjectObj, chapterName, data) {
               ${canPreview ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
               <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
               <a href="${f.url}" class="btn btn-outline" download>Download</a>
-              <button class="btn btn-danger" onclick="deleteFile('${classObj.key}','${streamObj.key}','${subjectObj.key}','${chapterName}','${cat.key}','${f.name}')">Delete</button>
             </div>
           </div>
         `;
