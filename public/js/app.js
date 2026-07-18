@@ -138,7 +138,6 @@ function showChapters(classObj, streamObj, subjectObj) {
           <label>Category</label>
           <select id="uploadCategory">
             <option value="notes">Notes</option>
-            <option value="books">Books</option>
             <option value="pdfs">PDFs</option>
           </select>
         </div>
@@ -156,6 +155,7 @@ function showChapters(classObj, streamObj, subjectObj) {
       <button class="btn btn-success" onclick="uploadFile('${classObj.key}','${streamObj.key}','${subjectObj.key}')">Upload</button>
     </div>
     <div id="ncertSection"></div>
+    <div id="booksSection"></div>
     <div class="card-grid">
       ${chapters.map(ch => `
         <div class="card chapter-card" onclick="navigateTo([
@@ -173,6 +173,7 @@ function showChapters(classObj, streamObj, subjectObj) {
   `;
   initTilt();
   loadNcertBooks(classObj.key, streamObj.key, subjectObj.key);
+  loadSubjectBooks(classObj.key, streamObj.key, subjectObj.key);
 }
 
 function loadNcertBooks(cls, stream, subject) {
@@ -208,6 +209,82 @@ function loadNcertBooks(cls, stream, subject) {
     .catch(() => {});
 }
 
+function loadSubjectBooks(cls, stream, subject) {
+  const section = document.getElementById('booksSection');
+  if (!section) return;
+
+  section.innerHTML = `
+    <div class="category-section" style="margin-bottom:2rem">
+      <div class="category-header">
+        <span style="font-size:1.2rem">📚</span>
+        <h4>Books</h4>
+      </div>
+      <div class="upload-form" style="margin-bottom:1rem">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Upload a Book</label>
+            <input type="file" id="bookFileInput">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end">
+            <button class="btn btn-success" onclick="uploadSubjectBook('${cls}','${stream}','${subject}')">Upload Book</button>
+          </div>
+        </div>
+      </div>
+      <div id="booksList" class="card-grid"></div>
+    </div>
+  `;
+
+  fetch(`/api/subject-books/${cls}/${stream}/${subject}`)
+    .then(r => r.json())
+    .then(files => {
+      const list = document.getElementById('booksList');
+      if (!list) return;
+      if (!files.length) {
+        list.innerHTML = `<div class="empty-state" style="padding:1rem"><p style="font-size:0.85rem">No books uploaded yet</p></div>`;
+        return;
+      }
+      list.innerHTML = files.map(f => `
+        <div class="card file-card">
+          <div class="file-icon">📚</div>
+          <div class="file-name">${f.name}</div>
+          <div class="file-meta">PDF &bull; ${(f.size/1024).toFixed(0)} KB</div>
+          <div class="file-actions">
+            ${isPreviewable(f.name) ? `<button class="btn btn-view" onclick="viewFile('${f.url}','${f.name}')">View</button>` : ''}
+            <a href="${f.url}" class="btn btn-primary" target="_blank">Open</a>
+            <a href="${f.url}" class="btn btn-outline" download>Download</a>
+          </div>
+        </div>
+      `).join('');
+    })
+    .catch(() => {});
+}
+
+function uploadSubjectBook(cls, stream, subject) {
+  const fileInput = document.getElementById('bookFileInput');
+  const file = fileInput.files[0];
+  if (!file) { toast('Please select a file'); return; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('class', cls);
+  formData.append('stream', stream);
+  formData.append('subject', subject);
+
+  const btn = document.querySelector('#booksSection .btn-success');
+  if (btn) { btn.textContent = 'Uploading...'; btn.disabled = true; }
+
+  fetch('/api/subject-books/upload', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      toast('Book uploaded successfully!');
+      setTimeout(() => loadSubjectBooks(cls, stream, subject), 500);
+    })
+    .catch(err => {
+      toast('Upload failed');
+      if (btn) { btn.textContent = 'Upload Book'; btn.disabled = false; }
+    });
+}
+
 function showFiles(classObj, streamObj, subjectObj, chapterObj) {
   const chapterName = chapterObj.key;
   contentEl.innerHTML = `<h2 class="page-title">${chapterName}</h2><div id="filesContent"><div class="empty-state"><div class="icon">⏳</div><p>Loading files...</p></div></div>`;
@@ -230,7 +307,6 @@ function renderFiles(classObj, streamObj, subjectObj, chapterName, data) {
           <label>Category</label>
           <select id="uploadCategory">
             <option value="notes">Notes</option>
-            <option value="books">Books</option>
             <option value="pdfs">PDFs</option>
           </select>
         </div>
@@ -251,7 +327,6 @@ function renderFiles(classObj, streamObj, subjectObj, chapterName, data) {
 
   const categories = [
     { key: 'notes', label: 'Notes', icon: '📝' },
-    { key: 'books', label: 'Books', icon: '📚' },
     { key: 'pdfs', label: 'PDFs', icon: '📄' },
   ];
 

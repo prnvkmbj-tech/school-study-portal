@@ -63,7 +63,7 @@ app.get('/api/files/:class/:stream/:subject/:chapter', async (req, res) => {
   try {
     const { class: cls, stream, subject, chapter } = req.params;
     const chapterDir = getChapterDir(cls, stream, subject, chapter);
-    const categories = ['notes', 'books', 'pdfs'];
+    const categories = ['notes', 'pdfs'];
     const result = {};
 
     for (const cat of categories) {
@@ -160,6 +160,42 @@ app.post('/api/chat', async (req, res) => {
 });
 
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+app.get('/api/subject-books/:class/:stream/:subject', async (req, res) => {
+  try {
+    const { class: cls, stream, subject } = req.params;
+    const booksDir = path.join(UPLOADS_DIR, cls, stream, subject, 'books');
+    if (await fs.pathExists(booksDir)) {
+      const files = (await fs.readdir(booksDir)).filter(f => !f.startsWith('.'));
+      res.json(files.map(f => ({
+        name: f,
+        size: fs.statSync(path.join(booksDir, f)).size,
+        url: `/uploads/${cls}/${stream}/${subject}/books/${encodeURIComponent(f)}`
+      })));
+    } else {
+      res.json([]);
+    }
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+app.post('/api/subject-books/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const { class: cls, stream, subject } = req.body;
+    if (!cls || !stream || !subject) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const booksDir = path.join(UPLOADS_DIR, cls, stream, subject, 'books');
+    await fs.ensureDir(booksDir);
+    const filename = Date.now() + '-' + req.file.originalname;
+    await fs.writeFile(path.join(booksDir, filename), req.file.buffer);
+    res.json({ message: 'Book uploaded successfully', file: filename });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
